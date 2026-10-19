@@ -12,6 +12,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- `codegraph install --target=grok` wires CodeGraph into Grok Build. It writes the MCP server into `~/.grok/config.toml` (or `$GROK_HOME/config.toml`), or into `.grok/config.toml` for a single project, and adds a short CodeGraph section to `AGENTS.md`. Restart Grok Build, then run `codegraph init` in each project you want indexed.
+
 ### Fixes
 
 - In VB.NET, every member of a `Structure` is now indexed, including its fields, properties, methods, constructors and nested enums. Before, only the first member was, so the rest could not be found and their callers looked empty.

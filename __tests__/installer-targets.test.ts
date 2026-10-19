@@ -79,6 +79,7 @@ function setHome(dir: string): { restore: () => void } {
     COPILOT_HOME: process.env.COPILOT_HOME,
     CODEX_HOME: process.env.CODEX_HOME,
     CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+    GROK_HOME: process.env.GROK_HOME,
   };
   process.env.HOME = dir;
   process.env.USERPROFILE = dir;
@@ -88,6 +89,7 @@ function setHome(dir: string): { restore: () => void } {
   delete process.env.COPILOT_HOME;
   delete process.env.CODEX_HOME;
   delete process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.GROK_HOME;
   return {
     restore() {
       if (prev.HOME === undefined) delete process.env.HOME; else process.env.HOME = prev.HOME;
@@ -98,6 +100,7 @@ function setHome(dir: string): { restore: () => void } {
       if (prev.COPILOT_HOME === undefined) delete process.env.COPILOT_HOME; else process.env.COPILOT_HOME = prev.COPILOT_HOME;
       if (prev.CODEX_HOME === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = prev.CODEX_HOME;
       if (prev.CLAUDE_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prev.CLAUDE_CONFIG_DIR;
+      if (prev.GROK_HOME === undefined) delete process.env.GROK_HOME; else process.env.GROK_HOME = prev.GROK_HOME;
     },
   };
 }
@@ -322,6 +325,62 @@ describe('Installer targets — partial-state idempotency', () => {
     expect(codex.detect('global').alreadyConfigured).toBe(true);
     expect(fs.readFileSync(path.join(tmpHome, '.codex', 'config.toml'), 'utf-8'))
       .toContain('[mcp_servers.codegraph]');
+  });
+
+  it('grok: install writes ~/.grok/config.toml and the short AGENTS.md block', () => {
+    const grok = getTarget('grok')!;
+    const first = grok.install('global', { autoAllow: false });
+    const tomlPath = path.join(tmpHome, '.grok', 'config.toml');
+    const agentsMd = path.join(tmpHome, '.grok', 'AGENTS.md');
+    expect(first.files.some((f) => f.path === tomlPath && f.action === 'created')).toBe(true);
+    expect(fs.readFileSync(tomlPath, 'utf-8')).toContain('[mcp_servers.codegraph]');
+    expect(fs.readFileSync(tomlPath, 'utf-8')).toContain('serve');
+    expect(fs.readFileSync(agentsMd, 'utf-8')).toContain('codegraph explore');
+    const second = grok.install('global', { autoAllow: false });
+    for (const f of second.files) expect(f.action).toBe('unchanged');
+  });
+
+  it('grok: install keeps sibling tables and honors GROK_HOME', () => {
+    const grok = getTarget('grok')!;
+    const home = path.join(tmpHome, 'grok-home');
+    fs.mkdirSync(home, { recursive: true });
+    process.env.GROK_HOME = home;
+    const tomlPath = path.join(home, 'config.toml');
+    fs.writeFileSync(
+      tomlPath,
+      '[mcp_servers.github]\ncommand = "gh-mcp"\nargs = ["serve"]\n\n[ui]\nvim_mode = true\n',
+    );
+
+    grok.install('global', { autoAllow: false });
+
+    const body = fs.readFileSync(tomlPath, 'utf-8');
+    expect(body).toContain('[mcp_servers.github]');
+    expect(body).toContain('[mcp_servers.codegraph]');
+    expect(body).toContain('vim_mode = true');
+    expect(fs.existsSync(path.join(tmpHome, '.grok', 'config.toml'))).toBe(false);
+
+    grok.uninstall('global');
+    const after = fs.readFileSync(tomlPath, 'utf-8');
+    expect(after).not.toContain('[mcp_servers.codegraph]');
+    expect(after).toContain('[mcp_servers.github]');
+    expect(after).toContain('vim_mode = true');
+    delete process.env.GROK_HOME;
+  });
+
+  it('grok: local install writes ./.grok/config.toml and ./AGENTS.md, and leaves the global file alone', () => {
+    const grok = getTarget('grok')!;
+    grok.install('global', { autoAllow: false });
+    const result = grok.install('local', { autoAllow: false });
+    const paths = result.files.map((f) => f.path.replace(/\\/g, '/'));
+    expect(paths.some((p) => p.endsWith('/.grok/config.toml'))).toBe(true);
+    expect(paths.some((p) => p.endsWith('/AGENTS.md') && !p.includes('/.grok/'))).toBe(true);
+    expect(fs.readFileSync(path.join(process.cwd(), '.grok', 'config.toml'), 'utf-8'))
+      .toContain('[mcp_servers.codegraph]');
+    expect(result.notes?.join(' ')).toMatch(/trusted/);
+
+    grok.uninstall('local');
+    expect(grok.detect('local').alreadyConfigured).toBe(false);
+    expect(grok.detect('global').alreadyConfigured).toBe(true);
   });
 
   it('opencode: prefers .jsonc when both .json and .jsonc exist', () => {
@@ -1387,6 +1446,7 @@ describe('Installer targets — registry', () => {
     expect(getTarget('copilot-vscode')?.id).toBe('copilot-vscode');
     expect(getTarget('copilot-cli')?.id).toBe('copilot-cli');
     expect(getTarget('copilot-jetbrains')?.id).toBe('copilot-jetbrains');
+    expect(getTarget('grok')?.id).toBe('grok');
     expect(getTarget('not-a-real-target')).toBeUndefined();
   });
 

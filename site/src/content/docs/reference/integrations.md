@@ -15,6 +15,7 @@ The interactive installer auto-detects and configures each supported agent — w
 - **Gemini CLI**
 - **Antigravity IDE**
 - **Kiro**
+- **Grok Build** — `[mcp_servers.codegraph]` in `$GROK_HOME/config.toml` (default `~/.grok/config.toml`), or `.grok/config.toml` for one project
 
 Run `npx @colbymchenry/codegraph` and pick your agent(s); see [Installation](/codegraph/getting-started/installation/) for the non-interactive flags.
 
